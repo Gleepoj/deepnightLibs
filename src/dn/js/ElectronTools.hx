@@ -19,11 +19,19 @@ typedef SubMenuItem = {
 }
 
 
+/**
+	Various useful methods for Electron based apps.
+
+	USAGE:
+	. add `ElectronTools.initMain(..)` to Main process (after the creation of the BrowserWindow instance)
+	. RECOMMENDED: add `import ElectronTools as ET` to `import.hx`
+**/
+
 class ElectronTools {
 	static var mainWindow : electron.main.BrowserWindow;
 
 	/**
-		This MUST be called after the creation of the BrowserWindow instance in "Main" process.
+		This init MUST be called after the creation of the BrowserWindow instance in "Main" process.
 	**/
 	public static function initMain(win:electron.main.BrowserWindow) {
 		mainWindow = win;
@@ -31,6 +39,9 @@ class ElectronTools {
 		// Invoke()/handle()
 		IpcMain.handle("exitApp", exitApp);
 		IpcMain.handle("reloadWindow", reloadWindow);
+		IpcMain.handle("toggleDevTools", toggleDevTools);
+		IpcMain.handle("openDevTools", openDevTools);
+		IpcMain.handle("closeDevTools", closeDevTools);
 		IpcMain.handle("setFullScreen", (ev,flag)->setFullScreen(flag));
 		IpcMain.handle("setWindowTitle", (ev,str)->setWindowTitle(str));
 		IpcMain.handle("fatalError", (ev,str)->fatalError(str));
@@ -38,6 +49,8 @@ class ElectronTools {
 		// SendSync()/on()
 		IpcMain.on("getScreenWidth", ev->ev.returnValue = getScreenWidth());
 		IpcMain.on("getScreenHeight", ev->ev.returnValue = getScreenHeight());
+		IpcMain.on("getZoom", ev->ev.returnValue = getZoom());
+		IpcMain.on("getPixelRatio", ev->ev.returnValue = getPixelRatio());
 		IpcMain.on("getRawArgs", ev->ev.returnValue = getRawArgs());
 		IpcMain.on("getAppResourceDir", ev->ev.returnValue = getAppResourceDir());
 		IpcMain.on("getExeDir", ev->ev.returnValue = getExeDir());
@@ -57,6 +70,18 @@ class ElectronTools {
 	/** Reload current window **/
 	public static function reloadWindow()
 		isRenderer() ? IpcRenderer.invoke("reloadWindow") : mainWindow.reload();
+
+	/** Toggle browser dev tools **/
+	public static function toggleDevTools()
+		isRenderer() ? IpcRenderer.invoke("toggleDevTools") : mainWindow.webContents.toggleDevTools();
+
+	/** Open browser dev tools **/
+	public static function openDevTools()
+		isRenderer() ? IpcRenderer.invoke("openDevTools") : mainWindow.webContents.openDevTools();
+
+	/** Close browser dev tools **/
+	public static function closeDevTools()
+		isRenderer() ? IpcRenderer.invoke("closeDevTools") : mainWindow.webContents.closeDevTools();
 
 	/** Set fullscreen mode **/
 	public static function setFullScreen(full:Bool)
@@ -81,6 +106,12 @@ class ElectronTools {
 		return isRenderer()
 			? IpcRenderer.sendSync("getScreenHeight")
 			: electron.main.Screen.getPrimaryDisplay().size.height;
+
+	/** Get primary display pixel density **/
+	public static function getPixelRatio() : Float
+		return isRenderer()
+			? IpcRenderer.sendSync("getPixelRatio")
+			: electron.main.Screen.getPrimaryDisplay().scaleFactor;
 
 	/** Get the root of the app resources (where `package.json` is) **/
 	public static function getAppResourceDir() : String
@@ -108,10 +139,18 @@ class ElectronTools {
 		return new dn.Args( raw.join(" ") );
 	}
 
-	/** Get zoom factor need to fit provided width/height **/
-	public static function getZoomToFit(targetWid:Float, targetHei:Float) : Float {
-		return dn.M.fmax(0, dn.M.fmin( getScreenWidth()/targetWid, getScreenHeight()/targetHei) );
+	/** Get zoom factor need to fit provided fittedWid/Hei. If container wid/hei aren't provided, the `mainWindow` inner client area size will be used instead. **/
+	public static function getZoomToFit(fittedWid:Float, fittedHei:Float, ?containerWid:Float, ?containerHei:Float) : Float {
+		return dn.M.fmax( 1/getPixelRatio(), dn.M.fmin(
+			( containerWid==null ? mainWindow.getContentSize()[0] : containerWid ) / fittedWid,
+			( containerHei==null ? mainWindow.getContentSize()[1] : containerHei) / fittedHei
+		));
 	}
+
+	/** Get window zoom factor **/
+	public static function getZoom() : Float
+		return isRenderer() ? IpcRenderer.sendSync("getZoom") : mainWindow.webContents.getZoomFactor();
+
 
 
 	/** Stop with an error message then close **/
@@ -125,19 +164,33 @@ class ElectronTools {
 	}
 
 
-	public static function locateFile(path:String, isFile:Bool) {
+	/** Open system file explorer on target file or dir. Return FALSE if something didn't work. **/
+	public static function locate(path:String, isFile:Bool) : Bool {
+		if( path==null )
+			return false;
+
 		var fp = isFile ? dn.FilePath.fromFile(path) : dn.FilePath.fromDir(path);
 
 		if( NodeTools.isWindows() )
 			fp.useBackslashes();
 
-		if( !NodeTools.fileExists(fp.full) )
+		// Try to open parent folder
+		if( isFile && !NodeTools.fileExists(fp.full) ) {
+			isFile = false;
 			fp.fileWithExt = null;
+		}
 
+		// Not found
+		if( !NodeTools.fileExists(fp.full) )
+			return false;
+
+		// Open
 		if( fp.fileWithExt==null )
 			electron.Shell.openPath(fp.full);
 		else
 			electron.Shell.showItemInFolder(fp.full);
+
+		return true;
 	}
 
 
@@ -165,7 +218,7 @@ class ElectronTools {
 				},
 				{
 					label: "Dev tools",
-					click: function() mainWindow.webContents.toggleDevTools(),
+					click: toggleDevTools,
 					accelerator: "CmdOrCtrl+Shift+I",
 				},
 				{

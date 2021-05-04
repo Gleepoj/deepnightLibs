@@ -2,6 +2,11 @@ package dn.js;
 
 import js.node.Fs;
 
+/**
+	Many useful methods from NodeJS.
+
+	RECOMMENDED: add `import NodeTools as NT;` to your `import.hx` file.
+**/
 class NodeTools {
 	public static inline function isWindows() return js.node.Os.platform()=="win32";
 	public static inline function isMacOs() return js.node.Os.platform()=="darwin";
@@ -10,6 +15,13 @@ class NodeTools {
 	/** Return TRUE if given path exists **/
 	public static function fileExists(path:String) {
 		return path==null || path.length==0 ? false : js.node.Fs.existsSync(path);
+	}
+
+	/** Return TRUE if given path is a directory **/
+	public static function isDirectory(path:String) {
+		return
+			try ( fileExists(path) && Fs.statSync(path).isDirectory() )
+			catch(_) false;
 	}
 
 	/** Rename a file and return TRUE if it worked. **/
@@ -62,13 +74,14 @@ class NodeTools {
 	/** Creates a path recursively **/
 	public static function createDirs(path:String) {
 		if( fileExists(path) )
-			return;
+			return false;
 
 		// Split sub dirs
 		var subDirs = dn.FilePath.fromDir(path).getSubDirectories(true);
 		for(subPath in subDirs)
 			if( !fileExists(subPath) )
 				js.node.Fs.mkdirSync(subPath);
+		return true;
 	}
 
 	/** Copy a file **/
@@ -81,7 +94,7 @@ class NodeTools {
 
 	/** Remove a directory **/
 	public static function removeDir(path:String) {
-		if( !fileExists(path) )
+		if( !isDirectory(path) )
 			return;
 
 		js.node.Fs.rmdirSync(path, {
@@ -91,7 +104,7 @@ class NodeTools {
 
 	/** Return TRUE if the directory contains anything: file or sub-dirs (even empty ones) **/
 	public static function dirContainsAnything(path:String) {
-		if( !fileExists(path) )
+		if( !isDirectory(path) )
 			return false;
 
 		for( f in js.node.Fs.readdirSync(path) )
@@ -102,7 +115,7 @@ class NodeTools {
 
 	/** Return TRUE if the directory contains any file (empty sub-dirs will be ignored) **/
 	public static function dirContainsAnyFile(path:String) {
-		if( !fileExists(path) )
+		if( !isDirectory(path) )
 			return false;
 
 		var pendings = [ path ];
@@ -121,8 +134,8 @@ class NodeTools {
 	}
 
 	/** Delete all FILES in directory AND its sub-dirs **/
-	public static function removeAllFiles(path:String, ?onlyExts:Array<String>) {
-		if( !fileExists(path) )
+	public static function removeAllFilesInDir(path:String, ?onlyExts:Array<String>) {
+		if( !isDirectory(path) )
 			return;
 
 		var extMap = new Map();
@@ -141,7 +154,7 @@ class NodeTools {
 
 	/** List all entries in a given directory **/
 	public static function readDir(path:String) : Array<String> {
-		if( !fileExists(path) )
+		if( !isDirectory(path) )
 			return [];
 
 		js.node.Require.require("fs");
@@ -149,8 +162,8 @@ class NodeTools {
 	}
 
 	/** Find all files in given directory and its subdirs **/
-	public static function findFilesRec(dirPath:String, ?ext:String) : Array<dn.FilePath> {
-		if( !fileExists(dirPath) )
+	public static function findFilesRecInDir(dirPath:String, ?ext:String) : Array<dn.FilePath> {
+		if( !isDirectory(dirPath) )
 			return [];
 
 		var all = [];

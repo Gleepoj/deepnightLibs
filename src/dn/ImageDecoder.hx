@@ -1,21 +1,33 @@
 package dn;
 
 typedef DecodedImage = {
-	var decodedBytes: haxe.io.Bytes;
+	var decodedBytes: haxe.io.Bytes; // pixels in BGRA format
 	var width: Int;
 	var height: Int;
 }
 
 class ImageDecoder {
+	public static var lastError : Null<String>;
 
 	public static function decode(fileContent:haxe.io.Bytes) : Null<DecodedImage> {
+		lastError = null;
 		return try switch dn.Identify.getType(fileContent) {
 			case Png: decodePng(fileContent);
 			case Gif: decodeGif(fileContent);
 			case Jpeg: decodeJpeg(fileContent);
+
+			case Aseprite:
+				#if heaps_aseprite
+					decodeAsepriteMainTexture(fileContent);
+				#else
+					throw('[ImageDecoder] Aseprite decoding requires both "heaps-aseprite" and "ase" libs (run "haxelib install ase" and "haxelib install heaps-aseprite").');
+					null;
+				#end
+
 			case _: null;
 		}
 		catch( err:String ) {
+			lastError = err;
 			return null;
 		}
 	}
@@ -151,4 +163,32 @@ class ImageDecoder {
 
 		#end
 	}
+
+
+	/** Thanks to Austin East lib "heaps-aseprite" **/
+	#if heaps_aseprite
+	static function decodeAsepriteMainTexture(encoded:haxe.io.Bytes) : Null<DecodedImage> {
+
+		try {
+			// Read Aseprite file
+			var ase = aseprite.Aseprite.fromBytes(encoded);
+
+			// Extract pixels as BGRA
+			var pixels = ase.getTexture().capturePixels();
+			pixels.convert(BGRA);
+
+			return {
+				decodedBytes: pixels.bytes,
+				width: pixels.width,
+				height: pixels.height,
+			}
+		}
+		catch(e:Dynamic) {
+			lastError = Std.string(e);
+			return null;
+		}
+
+	}
+	#end
+
 }

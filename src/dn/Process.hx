@@ -46,6 +46,12 @@ class Process {
 	var baseTimeMul = 1.0;
 
 	@:noCompletion
+	@:deprecated("Use baseTimeMul instead")
+	var speedMod(get,set) : Float;
+		@:noCompletion inline function get_speedMod() return baseTimeMul;
+		@:noCompletion inline function set_speedMod(v) return baseTimeMul = v;
+
+	@:noCompletion
 	@:deprecated("Use tmod instead")
 	public var dt(get,never) : Float; inline function get_dt() return tmod;
 
@@ -69,7 +75,7 @@ class Process {
 	/** Same as `cd` but it isn't affected by time multiplier **/
 	public var ucd : dn.Cooldown;
 
-	var _fixedUpdateCounter = 0.;
+	var _fixedUpdateAccu = 0.;
 
 
 	// Optional graphic context
@@ -258,6 +264,14 @@ class Process {
 		Eg. if the client is running 60fps, and fixedUpdateFps if 30fps, this method will only be called 1 frame out of 2.
 	 **/
 	function fixedUpdate() { }
+
+	/**
+		Return a ratio (0-1) representing the progression of the time between last fixedUpdate and the next one.
+		This value is, for example, used to smooth position of elements that are updated at a lower FPS.
+	**/
+	public inline function getFixedUpdateAccuRatio() {
+		return _fixedUpdateAccu / ( getDefaultFrameRate() / FIXED_UPDATE_FPS );
+	}
 
 	/** Called at the "end of the frame", after all updates()/fixedUpdates(), in declaration order. That's were graphic updates should probably happen. **/
 	function postUpdate() { }
@@ -491,9 +505,9 @@ class Process {
 			return;
 
 		p.markProfilingStart("fixed");
-		p._fixedUpdateCounter+=p.tmod;
-		while( p._fixedUpdateCounter >= p.getDefaultFrameRate() / FIXED_UPDATE_FPS ) {
-			p._fixedUpdateCounter -= p.getDefaultFrameRate() / FIXED_UPDATE_FPS;
+		p._fixedUpdateAccu+=p.tmod;
+		while( p._fixedUpdateAccu >= p.getDefaultFrameRate() / FIXED_UPDATE_FPS ) {
+			p._fixedUpdateAccu -= p.getDefaultFrameRate() / FIXED_UPDATE_FPS;
 			if( canRun(p) ) {
 				p.fixedUpdate();
 				if( p.onFixedUpdateCb!=null )
