@@ -40,6 +40,11 @@ class RandomTools {
 		return M.fclamp( v * ( 1 + rng(0,pct/100,true) ), 0, 1 );
 	}
 
+	/** Randomly variate given value `v` in +/- `pct`%, and ensures result is capped to 1 **/
+	public static inline function aroundBO(v:Float, pct=10) {
+		return M.fmin( v * ( 1 + rng(0,pct/100,true) ), 1 );
+	}
+
 	/** Random float value in range [0,v]. If `sign` is true, the value will be in [-v,v]. **/
 	public static inline function zeroTo(v:Float, sign=false) {
 		return rng(0,v,sign);
@@ -72,6 +77,12 @@ class RandomTools {
 	/** Random radian angle in range [ang-maxDist, ang+maxDist] **/
 	public static inline function angleAround(ang:Float, maxDist:Float) {
 		return ang + rng(0, maxDist, true);
+	}
+
+
+	/** Pick a value randomly in an array **/
+	public static inline function pick<T>(a:Array<T>) : Null<T> {
+		return a.length==0 ? null : a[Std.random(a.length)];
 	}
 
 

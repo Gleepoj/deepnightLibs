@@ -929,6 +929,48 @@ class M {
 		}
 	}
 
+	/**
+		Returns 4-points Bezier interpolation, `t` being the "time" (0-1) and `p0-p3` being control points.
+		More: https://javascript.info/bezier-curve
+		Online demo: https://www.desmos.com/calculator/cahqdxeshd?lang=fr
+	**/
+	public static inline function bezier4(t:Float, p0:Float, p1:Float,p2:Float, p3:Float) {
+		t = M.fclamp(t,0,1);
+		return
+			fastPow3(1-t) * p0 +
+			3*t*fastPow2(1-t) * p1 +
+			3*fastPow2(t)*(1-t) * p2 +
+			fastPow3(t) * p3;
+	}
+
+	/**
+		Returns 3-points Bezier interpolation, `t` being the "time" (0-1) and `p0-p3` being control points.
+		More: https://javascript.info/bezier-curve
+	**/
+	public static inline function bezier3(t:Float, p0:Float, p1:Float,p2:Float) {
+		t = M.fclamp(t,0,1);
+		return
+			fastPow2(1-t) * p0 +
+			2*t * (1-t) * p1 +
+			fastPow2(t) * p2;
+	}
+
+	public static inline function bezierFull4(t:Float, x0:Float,x1:Float,x2:Float,x3:Float,  y0:Float,y1:Float,y2:Float,y3:Float ) {
+		return bezier4( bezier4(t, x0, x1, x2, x3), y0, y1, y2, y3 );
+	}
+
+	static inline function fastPow2(n:Float):Float return n*n;
+	static inline function fastPow3(n:Float):Float return n*n*n;
+
+
+	public static inline function rotateX(x:Float, y:Float, rotCenterX:Float, rotCenterY:Float, ang:Float) {
+		return rotCenterX  +  (x-rotCenterX) * Math.cos(ang)  +  (y-rotCenterY) * Math.sin(ang);
+	}
+
+	public static inline function rotateY(x:Float, y:Float, rotCenterX:Float, rotCenterY:Float, ang:Float) {
+		return rotCenterY  -  (x-rotCenterX) * Math.sin(ang)  +  (y-rotCenterY) * Math.cos(ang);
+	}
+
 
 	@:noCompletion
 	public static function __test() {
@@ -973,5 +1015,13 @@ class M {
 		CiAssert.equals( parseInt("foo59bar", -1), -1 );
 		CiAssert.equals( parseInt("1.9", -1), 1 );
 		CiAssert.equals( parseInt("-99", -1), -99 );
+
+		CiAssert.equals( bezier3(0,  0, 1, 0.5 ), 0 );
+		CiAssert.equals( bezier3(0.5,  0, 1, 0.5 ), 0.625 );
+		CiAssert.equals( bezier3(1,  0, 1, 0.5 ), 0.5 );
+
+		CiAssert.equals( bezier4(0,  0, 0.4, 0.9, 1 ), 0 );
+		CiAssert.equals( bezier4(0.5,  0, 0.4, 0.9, 1 ), 0.6125 );
+		CiAssert.equals( bezier4(1,  0, 0.4, 0.9, 1 ), 1 );
 	}
 }

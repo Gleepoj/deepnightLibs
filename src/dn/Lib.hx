@@ -14,10 +14,15 @@ enum WeekDay {
 
 class Lib {
 
+	/**  Print a line to standard output, if any (shortcut for println) **/
+	public static inline function p(v:Dynamic) println(v);
+
 	/** Print a line to standard output, if any **/
 	public static function println(v:Dynamic) {
 		#if js
 			js.html.Console.log( Std.string(v) );
+		#elseif neko
+			neko.Lib.println( Std.string(v) );
 		#elseif flash
 			trace( Std.string(v) );
 		#elseif sys
@@ -25,6 +30,37 @@ class Lib {
 		#else
 			trace( Std.string(v) );
 		#end
+	}
+
+	/** Print a string to standard output without newline character, if any. Might not be supported everywhere. **/
+	public static function print(v:Dynamic) {
+		#if js
+			js.html.Console.log( Std.string(v) );
+		#elseif neko
+			neko.Lib.print( Std.string(v) );
+		#elseif flash
+			trace( Std.string(v) );
+		#elseif sys
+			Sys.print( Std.string(v) );
+		#else
+			trace( Std.string(v) );
+		#end
+	}
+
+	/** Print an array standard output, if any **/
+	public static inline function printArray(v:Array<Dynamic>) {
+		for(e in v)
+			println(e);
+	}
+
+
+
+	/**
+		Escape specificied character in given string, but doesn't re-escape if it's already.
+	**/
+	public static inline function safeEscape(str:String, escapedChar:String) : String {
+		var r = new EReg( "([^\\\\]|^)\\"+escapedChar, "gim" );
+		return r.replace(str, "$1\\"+escapedChar);
 	}
 
 
@@ -55,6 +91,21 @@ class Lib {
 		while (str.length<zeros)
 			str="0"+str;
 		return str;
+	}
+
+	/**
+		Trim (left and right) and any whitespace character (space, tab, end of line, etc.)
+	**/
+	static var L_WHITESPACE_TRIM = ~/^\s*/gi;
+	static var R_WHITESPACE_TRIM = ~/\s*$/gi;
+	public static inline function wtrim(str:String) {
+		if( str==null )
+			return "";
+		else {
+			str = L_WHITESPACE_TRIM.replace(str, "");
+			str = R_WHITESPACE_TRIM.replace(str, "");
+			return str;
+		}
 	}
 
 	public static inline function repeatChar(c:String, n:Int) {
@@ -176,6 +227,14 @@ class Lib {
 			if( checkElement(e) )
 				return e;
 		return defaultIfNotFound;
+	}
+
+	/** Return TRUE if given value exists in Array **/
+	public static function arrayContains<T>(arr:Array<T>, v:T, ?checkElement:T->Bool) : Bool {
+		for(e in arr)
+			if( checkElement!=null && checkElement(e) || e==v )
+				return true;
+		return false;
 	}
 
 	/** Score Array values and return best one **/
@@ -361,7 +420,7 @@ class Lib {
 		if( meta==null )
 			return def;
 
-		var f = Reflect.field(meta, Type.enumConstructor(e));
+		var f : Dynamic = Reflect.field(meta, Type.enumConstructor(e));
 		if( f==null || !Reflect.hasField(f,varName) || !Std.isOfType(Reflect.field(f,varName)[0], Float) )
 			return def;
 
@@ -583,7 +642,7 @@ class Lib {
 			return;
 
 		for( k in Reflect.fields(obj) ) {
-			var f = Reflect.field(obj,k);
+			var f : Dynamic = Reflect.field(obj,k);
 			switch Type.typeof(f) {
 				case TObject:
 					iterateObjectRec( f, cb );
@@ -597,6 +656,18 @@ class Lib {
 		}
 	}
 
+
+	/** Remove leading and trailing empty lines in a multi-lines String. **/
+    public static function trimEmptyLines(str:String) {
+        var lines = str.split("\n");
+        while( lines.length>0 && StringTools.trim(lines[0]).length==0 )
+            lines.shift();
+
+        while( lines.length>0 && StringTools.trim(lines[lines.length-1]).length==0 )
+            lines.pop();
+
+        return lines.join("\n");
+    }
 
 	@:noCompletion
 	public static function __test() {
@@ -630,6 +701,15 @@ class Lib {
 		CiAssert.isFalse( rectangleOverlaps(0,0,5,5, -1,0,1,1) );
 		CiAssert.isTrue( rectangleOverlaps(0,0,5,5, 2,2,1,1) );
 		CiAssert.isTrue( rectangleOverlaps(2,2,1,1, 0,0,5,5) );
+
+		CiAssert.equals( safeEscape(' \"hello\" ', '"'),	' \\"hello\\" ');
+		CiAssert.equals( safeEscape(' "hello" ', '"'),		' \\"hello\\" ');
+		CiAssert.equals( safeEscape(' "hello" \"world" ', '"'), ' \\"hello\\" \\"world\\" ');
+
+		CiAssert.equals( wtrim('  \thello  \t  \r\n'), 'hello' );
+		CiAssert.equals( wtrim(' \t '), '' );
+		CiAssert.equals( wtrim(''), '' );
+		CiAssert.equals( wtrim(null), '' );
 	}
 
 	#end // End of "if macro"

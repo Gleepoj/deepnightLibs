@@ -45,8 +45,7 @@ class ParticlePool {
 				if( best==null || @:privateAccess p.stamp<=@:privateAccess best.stamp )
 					best = p;
 
-			if( best.onKill!=null )
-				best.onKill();
+			@:privateAccess best.onKillCallbacks();
 			@:privateAccess best.reset(sb, t, x, y);
 			#if debug
 			best.allocPos = pos;
@@ -72,18 +71,36 @@ class ParticlePool {
 		}
 	}
 
+	/** Count active particles **/
 	public inline function count() return nalloc;
 
-	public inline function killAll() {
-		for( i in 0...nalloc) {
-			var p = all[i];
-			if( p.onKill!=null )
-				p.onKill();
-			@:privateAccess p.reset(null);
-			p.visible = false;
-		}
-		nalloc = 0;
+
+	/** Destroy every active particles **/
+	public function clear() {
+		// Because new particles might be allocated during onKill() callbacks,
+		// it's sometimes necessary to repeat the clear() process multiple times.
+		var repeat = false;
+		var maxRepeats = 10;
+		var p : HParticle = null;
+		do {
+			repeat = false;
+
+			for(i in 0...size) {
+				p = all[i];
+				if( @:privateAccess p.onKillCallbacks() )
+					repeat = true;
+				@:privateAccess p.reset(null);
+				p.visible = false;
+			}
+
+			if( repeat && maxRepeats--<=0 )
+				throw("Infinite loop during clear: an onKill() callback is repeatingly allocating new particles.");
+		} while( repeat );
 	}
+
+
+	@:noCompletion @:deprecated("Use clear()")
+	public inline function killAll() clear();
 
 	public inline function killAllWithFade() {
 		for( i in 0...nalloc) {
@@ -262,7 +279,8 @@ class HParticle extends BatchElement {
 	public var onTouchGround	: Null<HParticle->Void>;
 	public var onUpdate			: Null<HParticle->Void>;
 	public var onFadeOutStart	: Null<HParticle->Void>;
-	public var onKill			: Null<Void->Void>;
+	public var onKill : Null<Void->Void>;
+	public var onKillP : Null<HParticle->Void>;
 
 	public var killOnLifeOut	: Bool;
 	public var killed			: Bool;
@@ -406,6 +424,7 @@ class HParticle extends BatchElement {
 
 		// Callbacks
 		onStart = null;
+		onKillP = null;
 		onKill = null;
 		onBounce = null;
 		onUpdate = null;
@@ -448,6 +467,18 @@ class HParticle extends BatchElement {
 		dn.Color.colorizeBatchElement(this, c, ratio);
 	}
 
+	public inline function colorizeRandomDarker(c:UInt, range:Float) {
+		colorize( Color.toBlack(c,rnd(0,range)) );
+	}
+
+	public inline function colorizeRandomLighter(c:UInt, range:Float) {
+		colorize( Color.toWhite(c,rnd(0,range)) );
+	}
+
+	public inline function randScale(min:Float, max:Float, sign=false) {
+		setScale( rnd(min, max, sign) );
+	}
+
 	public inline function colorizeRandom(min:UInt, max:UInt) {
 		dn.Color.colorizeBatchElement(this, dn.Color.interpolateInt(min,max,rnd(0,1)), 1);
 	}
@@ -476,6 +507,11 @@ class HParticle extends BatchElement {
 		this.alpha = 0;
 		maxAlpha = alpha;
 		da = spd;
+	}
+
+	public inline function autoRotate(spd=1.0) {
+		autoRotateSpeed = spd;
+		rotation = getMoveAng();
 	}
 
 	function toString() {
@@ -519,15 +555,28 @@ class HParticle extends BatchElement {
 	inline function get_remainingLifeS() return rLifeF/fps;
 	inline function get_curLifeRatio() return 1-rLifeF/maxLifeF; // 0(start) -> 1(end)
 
-	public function kill() {
-		if( killed )
-			return;
-
+	inline function onKillCallbacks() {
+		var any = false;
+		if( onKillP!=null ) {
+			var cb = onKillP;
+			onKillP = null;
+			cb(this);
+			any = true;
+		}
 		if( onKill!=null ) {
 			var cb = onKill;
 			onKill = null;
 			cb();
+			any = true;
 		}
+		return any;
+	}
+
+	public function kill() {
+		if( killed )
+			return;
+
+		onKillCallbacks();
 
 		alpha = 0;
 		lifeS = 0;
@@ -564,6 +613,10 @@ class HParticle extends BatchElement {
 		gy = Math.sin(a)*spd;
 	}
 
+
+	public inline function cancelVelocities() {
+		dx = dy = gx = gy = 0;
+	}
 
 	public inline function moveAng(a:Float, spd:Float) {
 		dx = Math.cos(a)*spd;

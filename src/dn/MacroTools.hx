@@ -41,11 +41,56 @@ class MacroTools {
 	}
 
 
+	@:deprecated("Use getRawBuildDate() or getHumanBuildDate()") @:noCompletion
 	public static macro function getBuildDate() {
-		var pos = Context.currentPos();
+		return { pos:Context.currentPos(), expr:EConst( CString( Date.now().toString() ) ) }
+	}
+
+	/** Return the compilation date as standard Date string format **/
+	public static macro function getRawBuildDate() {
+		return { pos:Context.currentPos(), expr:EConst( CString( Date.now().toString() ) ) }
+	}
+
+	/**
+		Return a version String containing various info about current build: platform, steam, debug, 32/64bits etc.
+		Example: "2021-10-01-21-39-53--hldx-steam-debug-64"
+	**/
+	public static macro function getBuildInfo(?separator:ExprOf<String>) {
+		var sep = switch separator.expr {
+			case null, EConst(CIdent("null")) : "-";
+			case EConst(CString(s, _)): s;
+			case _: Context.fatalError("Unexpected value "+separator.expr, separator.pos);
+		}
+
+		var parts = [ (~/[^a-z0-9]/gi).replace( Date.now().toString(), sep ) ];
+		parts.push("");
+		if( Context.defined("js") ) parts.push("js");
+		if( Context.defined("neko") ) parts.push("neko");
+
+		if( Context.defined("hldx") ) parts.push("hldx");
+		else if( Context.defined("hlsdl") ) parts.push("hlsdl");
+		else if( Context.defined("hl") ) parts.push("hl");
+
+		if( Context.defined("hlsteam") ) parts.push("steam");
+		if( Context.defined("debug") ) parts.push("debug");
+
+		var base : Expr = {
+			pos: Context.currentPos(),
+			expr: EConst( CString(parts.join(sep)) ),
+		}
+		if( Context.defined("hl") ) {
+			return macro $base + ( hl.Api.is64() ? $v{sep}+"64" : $v{sep}+"32 ");
+		}
+		else
+			return base;
+	}
+
+	/** Return the compilation date as a human-readable format: "Month XXth (HH:MM)" **/
+	public static macro function getHumanBuildDate() {
 		var d = Date.now();
 		var months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-		return { pos:pos, expr:EConst(CString(months[d.getMonth()]+DateTools.format(d, " %d (%H:%M)"))) }
+		var str = months[ d.getMonth() ] + DateTools.format(d, " %d (%H:%M)");
+		return { pos:Context.currentPos(), expr:EConst(CString(str)) }
 	}
 
 
