@@ -18,6 +18,15 @@ class Sfx {
 		return macro null;
 	}
 
+	#if placeholderSfx
+	/**
+		Return a hxd.res.Sound object from the provided placeholder path in `-D path/to/placeholder.wav`
+	**/
+	macro public static function getPlaceholderSfx() {
+		var path = haxe.macro.Context.getDefines().get("placeholderSfx");
+		return macro hxd.Res.load( $v{path} ).toSound();
+	}
+	#end
 
 
 	#if !macro
@@ -290,6 +299,14 @@ class Sfx {
 		Return final actual volume (a mix of Sfx, spatialization and Group factors)
 	**/
 	public inline function getFinalVolume() {
+		return getMixedVolumeFactor() * volume;
+	}
+
+
+	/**
+		Get the multiplier factor that should be applied to volume value to reflect spatialization and group volumes.
+	**/
+	function getMixedVolumeFactor() {
 		var spatial = 1.0;
 		if( M.isValidNumber(spatialX) && M.isValidNumber(spatialY) ) {
 			var dist = Math.sqrt( (spatialX-SPATIAL_LISTENER_X)*(spatialX-SPATIAL_LISTENER_X) + (spatialY-SPATIAL_LISTENER_Y)*(spatialY-SPATIAL_LISTENER_Y) );
@@ -299,7 +316,7 @@ class Sfx {
 
 		final overrideVol : Float = SOUND_VOLUMES_OVERRIDE.exists(identifier) ? SOUND_VOLUMES_OVERRIDE.get(identifier) : 1;
 
-		return volume * getGlobalGroup(groupId).getVolume() * spatial * overrideVol;
+		return getGlobalGroup(groupId).getVolume() * spatial * overrideVol;
 	}
 
 	/**
@@ -364,7 +381,7 @@ class Sfx {
 	**/
 	public function fadeTo(vol:Float, duratonS=1.0, ?onComplete:Void->Void) {
 		if( _requiresChannel() )
-			lastChannel.fadeTo(vol, duratonS, onComplete);
+			lastChannel.fadeTo(vol * getMixedVolumeFactor(), duratonS, onComplete);
 		return this;
 	}
 

@@ -13,7 +13,8 @@ import hxd.impl.AllocPos;
 class ParticlePool {
 	var all : haxe.ds.Vector<HParticle>;
 	var nalloc : Int;
-	public var size(get,never) : Int; inline function get_size() return all.length;
+	public var size(get,never) : Int;
+		inline function get_size() return all.length;
 
 	public function new(tile:h2d.Tile, count:Int, fps:Int) {
 		all = new haxe.ds.Vector(count);
@@ -42,7 +43,7 @@ class ParticlePool {
 			// Find oldest active part
 			var best : HParticle = null;
 			for(p in all)
-				if( best==null || @:privateAccess p.stamp<=@:privateAccess best.stamp )
+				if( best==null || @:privateAccess p.stamp<=@:privateAccess best.stamp ) // TODO optimize that
 					best = p;
 
 			@:privateAccess best.onKillCallbacks();
@@ -54,20 +55,18 @@ class ParticlePool {
 		}
 	}
 
-	function free(kp:HParticle) {
-		if( all==null )
-			return;
-
-		if( nalloc>1 ) {
-			var idx = @:privateAccess kp.poolIdx;
-			var tmp = all[idx];
-			all[idx] = all[nalloc-1];
-			@:privateAccess all[idx].poolIdx = idx;
-			all[nalloc-1] = tmp;
-			nalloc--;
-		}
-		else {
-			nalloc = 0;
+	inline function free(kp:HParticle) {
+		if( all!=null ) {
+			if( nalloc>1 ) {
+				var idx = @:privateAccess kp.poolIdx;
+				var tmp = all[idx];
+				all[idx] = all[nalloc-1];
+				@:privateAccess all[idx].poolIdx = idx;
+				all[nalloc-1] = tmp;
+				nalloc--;
+			}
+			else
+				nalloc = 0;
 		}
 	}
 
@@ -115,7 +114,7 @@ class ParticlePool {
 		all = null;
 	}
 
-	public function update(tmod:Float, ?updateCb:HParticle->Void) {
+	public inline function update(tmod:Float, ?updateCb:HParticle->Void) {
 		var i = 0;
 		while( i < nalloc ){
 			var p = all[i];
@@ -211,21 +210,22 @@ class Emitter {
 		cd = null;
 	}
 
-	public function update(tmod:Float) {
+	public inline function update(tmod:Float) {
 		if( activeCond!=null )
 			active = activeCond();
-		if( !active || destroyed )
-			return;
 
-		this.tmod = tmod;
-		cd.update(tmod);
-		delayer.update(tmod);
+		if( active && !destroyed ) {
+			this.tmod = tmod;
+			cd.update(tmod);
+			delayer.update(tmod);
 
-		if( tickS<=0 || !cd.hasSetS("emitterTick", tickS) )
-			onUpdate();
+			if( tickS<=0 || !cd.hasSetS("emitterTick", tickS) )
+				onUpdate();
 
-		if( !permanent && !cd.has("emitterLife") )
-			dispose();
+			if( !permanent && !cd.has("emitterLife") )
+				dispose();
+		}
+
 	}
 }
 
@@ -264,12 +264,17 @@ class HParticle extends BatchElement {
 	public var alphaFlicker		: Float;
 	public var customTmod		: Void->Float;
 
+	var delayedCb : Null< HParticle->Void >;
+	var delayedCbTimeS : Float;
+
+
 	public var lifeS(never,set)	: Float;
 	public var lifeF(never,set)	: Float;
 	var rLifeF					: Float;
 	var maxLifeF				: Float;
-	public var remainingLifeS(get,never)	: Float;
-	public var curLifeRatio(get,never)		: Float; // 0(start) -> 1(end)
+	public var elapsedLifeS(get,never) : Float;
+	public var remainingLifeS(get,never) : Float;
+	public var curLifeRatio(get,never) : Float; // 0(start) -> 1(end)
 
 	public var delayS(get, set)		: Float;
 	public var delayF(default, set)	: Float;
@@ -281,6 +286,7 @@ class HParticle extends BatchElement {
 	public var onFadeOutStart	: Null<HParticle->Void>;
 	public var onKill : Null<Void->Void>;
 	public var onKillP : Null<HParticle->Void>;
+	public var onLeaveBounds : Null<HParticle->Void>;
 
 	public var killOnLifeOut	: Bool;
 	public var killed			: Bool;
@@ -329,7 +335,7 @@ class HParticle extends BatchElement {
 	var animLoop : Bool;
 	var animStop : Bool;
 	public var animSpd : Float;
-	public function playAnimAndKill(lib:dn.heaps.slib.SpriteLib, k:String, spd=1.0) {
+	public inline function playAnimAndKill(lib:dn.heaps.slib.SpriteLib, k:String, spd=1.0) {
 		animLib = lib;
 		animId = k;
 		animCursor = 0;
@@ -337,7 +343,7 @@ class HParticle extends BatchElement {
 		animSpd = spd;
 		applyAnimFrame();
 	}
-	public function playAnimLoop(lib:dn.heaps.slib.SpriteLib, k:String, spd=1.0) {
+	public inline function playAnimLoop(lib:dn.heaps.slib.SpriteLib, k:String, spd=1.0) {
 		animLib = lib;
 		animId = k;
 		animCursor = 0;
@@ -345,7 +351,7 @@ class HParticle extends BatchElement {
 		animSpd = spd;
 		applyAnimFrame();
 	}
-	public function playAnimAndStop(lib:dn.heaps.slib.SpriteLib, k:String, spd=1.0) {
+	public inline function playAnimAndStop(lib:dn.heaps.slib.SpriteLib, k:String, spd=1.0) {
 		animLib = lib;
 		animId = k;
 		animCursor = 0;
@@ -364,7 +370,7 @@ class HParticle extends BatchElement {
 
 
 	@:access(h2d.Tile)
-	public function setTile(tile:Tile) {
+	public inline function setTile(tile:Tile) {
 		this.t.setPosition(tile.x, tile.y);
 		this.t.setSize(tile.width, tile.height);
 		this.t.dx = tile.dx;
@@ -372,7 +378,16 @@ class HParticle extends BatchElement {
 		this.t.switchTexture(tile);
 	}
 
-	function reset(sb:Null<SpriteBatch>, ?tile:Tile, x:Float=0., y:Float=0.) {
+	public inline function inc0() return Math.isNaN(data0) ? data0=1 : ++data0;
+	public inline function inc1() return Math.isNaN(data1) ? data1=1 : ++data1;
+	public inline function inc2() return Math.isNaN(data2) ? data2=1 : ++data2;
+	public inline function inc3() return Math.isNaN(data3) ? data3=1 : ++data3;
+	public inline function inc4() return Math.isNaN(data4) ? data4=1 : ++data4;
+	public inline function inc5() return Math.isNaN(data5) ? data5=1 : ++data5;
+	public inline function inc6() return Math.isNaN(data6) ? data6=1 : ++data6;
+	public inline function inc7() return Math.isNaN(data7) ? data7=1 : ++data7;
+
+	inline function reset(sb:Null<SpriteBatch>, ?tile:Tile, x:Float=0., y:Float=0.) {
 		if( tile!=null )
 			setTile(tile);
 
@@ -408,7 +423,10 @@ class HParticle extends BatchElement {
 		setCenterRatio(0.5, 0.5);
 		killed = false;
 		maxAlpha = 1;
-		dx = dy = da = dr = ds = dsX = dsY = 0;
+		dx = dy = 0;
+		da = 0;
+		dr = 0;
+		ds = dsX = dsY = 0;
 		gx = gy = 0;
 		frictX = frictY = 1;
 		drFrict = 1;
@@ -421,6 +439,7 @@ class HParticle extends BatchElement {
 		groundY = null;
 		groupId = null;
 		autoRotateSpeed = 0;
+		delayedCbTimeS = 0;
 
 		// Callbacks
 		onStart = null;
@@ -430,11 +449,13 @@ class HParticle extends BatchElement {
 		onUpdate = null;
 		onFadeOutStart = null;
 		onTouchGround = null;
+		onLeaveBounds = null;
+		delayedCb = null;
 	}
 
 
 
-	public function colorAnimS(from:UInt, to:UInt, t:Float) {
+	public inline function colorAnimS(from:UInt, to:UInt, t:Float) {
 		fromColor = from;
 		toColor = to;
 		dColor = 1/(t*fps);
@@ -452,7 +473,14 @@ class HParticle extends BatchElement {
 		return v;
 	}
 
-	public inline function setCenterRatio(xr:Float, yr:Float) {
+	/**
+		Set pivot ratios. If `pixelPerfect` is true (default), then pivots will snap to closest pixel.
+	**/
+	public inline function setCenterRatio(xr:Float, yr:Float, pixelPerfect=false) {
+		if( pixelPerfect ) {
+			xr = M.round(t.width*xr) / t.width;
+			yr = M.round(t.height*yr) / t.height;
+		}
 		t.setCenterRatio(xr,yr);
 		animXr = xr;
 		animYr = yr;
@@ -483,14 +511,19 @@ class HParticle extends BatchElement {
 		dn.Color.colorizeBatchElement(this, dn.Color.interpolateInt(min,max,rnd(0,1)), 1);
 	}
 
-	public function fade(targetAlpha:Float, fadeInSpd=1.0, fadeOutSpd=1.0) {
+	public inline function delayCallback(cb:HParticle->Void, sec:Float) {
+		delayedCb = cb;
+		delayedCbTimeS = sec;
+	}
+
+	public inline function fade(targetAlpha:Float, fadeInSpd=1.0, fadeOutSpd=1.0) {
 		this.alpha = 0;
 		maxAlpha = targetAlpha;
 		da = targetAlpha*0.1*fadeInSpd;
 		fadeOutSpeed = targetAlpha*0.1*fadeOutSpd;
 	}
 
-	public function setFadeS(targetAlpha:Float, fadeInDurationS:Float, fadeOutDurationS:Float) {
+	public inline function setFadeS(targetAlpha:Float, fadeInDurationS:Float, fadeOutDurationS:Float) : Void {
 		this.alpha = 0;
 		maxAlpha = targetAlpha;
 		if( fadeInDurationS<=0 )
@@ -503,7 +536,7 @@ class HParticle extends BatchElement {
 			fadeOutSpeed = targetAlpha / (fadeOutDurationS*fps);
 	}
 
-	public function fadeIn(alpha:Float, spd:Float) {
+	public inline function fadeIn(alpha:Float, spd:Float) {
 		this.alpha = 0;
 		maxAlpha = alpha;
 		da = spd;
@@ -514,11 +547,12 @@ class HParticle extends BatchElement {
 		rotation = getMoveAng();
 	}
 
-	function toString() {
+	@:keep
+	public function toString() {
 		return 'HPart@$x,$y (lifeS=$remainingLifeS)';
 	}
 
-	public function clone() : HParticle {
+	public inline function clone() : HParticle {
 		var s = new haxe.Serializer();
 		s.useCache = true;
 		s.serialize(this);
@@ -537,12 +571,12 @@ class HParticle extends BatchElement {
 		return delayF = d;
 	}
 
-	function set_lifeS(v:Float) {
+	inline function set_lifeS(v:Float) {
 		rLifeF = maxLifeF = M.fmax(fps*v,0);
 		return v;
 	}
 
-	function set_lifeF(v:Float) {
+	inline function set_lifeF(v:Float) {
 		rLifeF = maxLifeF = M.fmax(v,0);
 		return v;
 	}
@@ -552,6 +586,7 @@ class HParticle extends BatchElement {
 		rLifeF*=f;
 	}
 
+	inline function get_elapsedLifeS() return (maxLifeF-rLifeF)/fps;
 	inline function get_remainingLifeS() return rLifeF/fps;
 	inline function get_curLifeRatio() return 1-rLifeF/maxLifeF; // 0(start) -> 1(end)
 
@@ -572,19 +607,24 @@ class HParticle extends BatchElement {
 		return any;
 	}
 
-	public function kill() {
-		if( killed )
-			return;
+	/** Remove particle immediately without fading out **/
+	public inline function kill() {
+		if( !killed ) {
+			onKillCallbacks();
 
-		onKillCallbacks();
+			alpha = 0;
+			lifeS = 0;
+			delayS = 0;
+			killed = true;
+			visible = false;
 
-		alpha = 0;
-		lifeS = 0;
-		delayS = 0;
-		killed = true;
-		visible = false;
+			@:privateAccess pool.free(this);
+		}
+	}
 
-		@:privateAccess pool.free(this);
+	/** Lower life to 0 and start fading out **/
+	public inline function timeoutNow() {
+		rLifeF = 0;
 	}
 
 	function dispose() {
@@ -651,14 +691,16 @@ class HParticle extends BatchElement {
 	}
 
 	public inline function optimPow(v:Float, p:Float) {
-		return (p==1||v==0||v==1) ? v : Math.pow(v,p);
+		return ( p==1 || v==0 || v==1 ) ? v : Math.pow(v,p);
 	}
 
 	inline function updatePart(tmod:Float) {
 		if( customTmod!=null )
 			tmod = customTmod();
 		delayF -= tmod;
+
 		if( delayF<=0 && !killed ) {
+			// Start callback
 			if( onStart!=null ) {
 				var cb = onStart;
 				onStart = null;
@@ -685,20 +727,21 @@ class HParticle extends BatchElement {
 			}
 
 			if( !killed ) {
-				// gravité
+				// Gravity
 				dx += gx * tmod;
 				dy += gy * tmod;
 
-				// mouvement
+				// Velocities
 				x += dx * tmod;
 				y += dy * tmod;
 
-				// friction
+				// Frictions
 				if( frictX==frictY ){
 					var frictTmod = optimPow(frictX, tmod);
 					dx *= frictTmod;
 					dy *= frictTmod;
-				}else{
+				}
+				else {
 					dx *= optimPow(frictX, tmod);
 					dy *= optimPow(frictY, tmod);
 				}
@@ -713,7 +756,7 @@ class HParticle extends BatchElement {
 						onTouchGround(this);
 				}
 
-				if( !killed ) { // can be killed in onBounce
+				if( !killed ) { // Could have been killed in onBounce
 					rotation += dr * tmod;
 					dr *= optimPow(drFrict, tmod);
 					scaleX += (ds+dsX) * tmod;
@@ -745,8 +788,10 @@ class HParticle extends BatchElement {
 						}
 					}
 
+					// Fade out start callback
 					if( onFadeOutStart!=null && rLifeF>0 && rLifeF-tmod<=0 )
 						onFadeOutStart(this);
+
 					rLifeF -= tmod;
 
 					// Fade out (life)
@@ -755,12 +800,29 @@ class HParticle extends BatchElement {
 					else if( alphaFlicker>0 )
 						alpha = M.fclamp( alpha + rnd(0, alphaFlicker, true), 0, maxAlpha );
 
-					// Death
-					if( rLifeF <= 0 && (alpha <= 0 || killOnLifeOut) ||
-					  bounds != null && !(x >= bounds.xMin && x < bounds.xMax && y >= bounds.yMin && y < bounds.yMax) )
+
+					// Check bounds
+					if( bounds!=null && !( x>=bounds.xMin && x<bounds.xMax && y>=bounds.yMin && y<bounds.yMax ) ) {
+						if( onLeaveBounds!=null )
+							onLeaveBounds(this);
 						kill();
-					else if( onUpdate!=null )
+					}
+					else if( rLifeF<=0 && ( alpha<=0 || killOnLifeOut ) ) {
+						// Timed out
+						kill();
+					}
+					else if( onUpdate!=null ) {
+						// Update CB
 						onUpdate(this);
+					}
+
+					// Delayed callback
+					if( !killed && delayedCb!=null && elapsedLifeS>=delayedCbTimeS ) {
+						var cb = delayedCb;
+						delayedCb = null;
+						delayedCbTimeS = 0;
+						cb(this);
+					}
 				}
 			}
 

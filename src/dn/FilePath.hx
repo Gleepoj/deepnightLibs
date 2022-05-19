@@ -30,12 +30,6 @@ class FilePath {
 	public static var SLASH_MODE = Preserve;
 
 	/**
-		If TRUE, net drive paths will be converted to a valid file URI (eg. "\\host\dir\file.txt" => "file://host/dir/file.txt"). `uriAuthority` and `uriScheme` will contain correct values.
-		If FALSE (default), network drives will be kept as-they-are and the first dir will contain a double-backslash. The `uriAuthority` and `uriScheme` values will be null.
-	**/
-	// public static var CONVERT_WINDOWS_NET_DRIVES = false;
-
-	/**
 		URI scheme part not including ":" nor slashes (eg. "file" in "file://localhost/c:/windows/foo.txt")
 
 		Can be null, always lowercase
@@ -50,7 +44,7 @@ class FilePath {
 	public var uriAuthority(default,null) : Null<String>;
 
 	/**
-		Directory
+		Directory with drive letter
 
 		Can be null, no slash in the end.
 	**/
@@ -202,17 +196,6 @@ class FilePath {
 
 
 	/**
-		Extract URI prefix from a directory (eg. file URI "file:///test.txt")
-	**/
-	// public function getUriPrefix(forceLowerCase=true) : Null<String> {
-	// 	var prefixReg = ~/^([a-z]+):\/\//gi;
-	// 	if( directory!=null && prefixReg.match(directory) )
-	// 		return forceLowerCase ? prefixReg.matched(1).toLowerCase() : prefixReg.matched(1);
-	// 	else
-	// 		return null;
-	// }
-
-	/**
 		Return TRUE if contains a Windows drive letter
 	**/
 	public inline function hasDriveLetter() {
@@ -252,6 +235,11 @@ class FilePath {
 			return true;
 		else
 			return FilePath.fromDir(pathA).getDriveLetter() == FilePath.fromDir(pathB).getDriveLetter();
+	}
+
+
+	public function isAbsolute() {
+		return uriScheme!=null || directory!=null && getDirectoryArray()[0]=="" || hasDriveLetter();
 	}
 
 
@@ -375,11 +363,16 @@ class FilePath {
 				rawPath = rawPath.substr(0,rawPath.length-1);
 
 			// Directory
-			directory = containsFileName ? rawPath.substr( 0, rawPath.lastIndexOf(slash()) ) : rawPath;
-			if( directory.length==0 && containsFileName && rawPath.charAt(0)==slash() )
-				directory = "/"; // dir is only a single leading slash (eg. "/file.txt")
-			else if( directory.length==0 )
-				directory = null;
+			if( rawPath.indexOf(slash())<0 ) {
+				directory = containsFileName ? null : rawPath;
+			}
+			else {
+				directory = containsFileName ? rawPath.substr( 0, rawPath.lastIndexOf(slash()) ) : rawPath;
+				if( directory.length==0 && containsFileName && rawPath.charAt(0)==slash() )
+					directory = "/"; // dir is only a single leading slash (eg. "/file.txt")
+				else if( directory.length==0 )
+					directory = null;
+			}
 
 			// File name & extension
 			if( containsFileName && rawPath.lastIndexOf(slash()) < rawPath.length-1 ) {
@@ -426,8 +419,6 @@ class FilePath {
 			// Sanitize dirs
 			if( directory!=slash() && directory!=null ) {
 				var ignore = 0;
-				// if( hasUriScheme() )
-					// ignore++;
 				if( hasDriveLetter() )
 					ignore++;
 
@@ -691,8 +682,12 @@ class FilePath {
 	/**
 		Extract the file extension from a path. Returns null if it doesn't exist.
 	**/
-	public static inline function extractExtension(path:String) : Null<String> {
-		return FilePath.fromFile(path).extension;
+	public static inline function extractExtension(path:String, lowercase=false) : Null<String> {
+		var e = FilePath.fromFile(path).extension;
+		if( lowercase && e!=null )
+			return e.toLowerCase();
+		else
+			return e;
 	}
 
 
@@ -899,6 +894,20 @@ class FilePath {
 		CiAssert.equals( FilePath.fromDir("c:/dir").makeRelativeTo("d:/dir").full, "c:/dir" );
 		CiAssert.equals( FilePath.fromDir("c:/").makeRelativeTo("d:/").full, "c:" );
 
+		// Absolute paths
+		CiAssert.isTrue( FilePath.fromDir("c:/windows/system").isAbsolute() );
+		CiAssert.isTrue( FilePath.fromDir("file:///windows/system").isAbsolute() );
+		CiAssert.isTrue( FilePath.fromDir("file://host/windows/system").isAbsolute() );
+		CiAssert.isTrue( FilePath.fromDir("file:/windows/system").isAbsolute() );
+		CiAssert.isTrue( FilePath.fromDir("/windows/system").isAbsolute() );
+		CiAssert.isTrue( FilePath.fromFile("/windows/file.txt").isAbsolute() );
+		CiAssert.isTrue( !FilePath.fromFile("windows/file.txt").isAbsolute() );
+		CiAssert.isTrue( !FilePath.fromFile("./windows/file.txt").isAbsolute() );
+		CiAssert.isTrue( !FilePath.fromFile("../windows/file.txt").isAbsolute() );
+		CiAssert.isTrue( !FilePath.fromDir("windows").isAbsolute() );
+		CiAssert.isTrue( !FilePath.fromFile("file.txt").isAbsolute() );
+
+
 		// Drive letters
 		CiAssert.equals( FilePath.fromDir("c:/dir").getDriveLetter(), "c" );
 		CiAssert.equals( FilePath.fromDir("c:/dir").directory, "c:/dir" );
@@ -935,6 +944,7 @@ class FilePath {
 
 		CiAssert.equals( FilePath.fromFile("file://localhost/foo//pouet.txt").full, "file://localhost/foo/pouet.txt" );
 		CiAssert.equals( FilePath.fromFile("file:/foo//pouet.txt").full, "file:/foo/pouet.txt" );
+		CiAssert.equals( FilePath.fromFile("file:///pouet.txt").full, "file:/pouet.txt" );
 
 		// Windows network drives
 		CiAssert.equals( FilePath.fromFile("\\\\foo\\bar\\test.txt").isWindowsNetworkDrive, true );
