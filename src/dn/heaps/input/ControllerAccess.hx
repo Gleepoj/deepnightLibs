@@ -11,6 +11,9 @@ import dn.heaps.input.Controller;
 class ControllerAccess<T:Int> {
 	public var input(default,null) : Controller<T>;
 
+	public var disableRumble(get,set) : Bool;
+	public var rumbleMultiplicator(get,set) : Float;
+
 	var destroyed(get,never) : Bool;
 	var bindings(get,never) : Map<T, Array< InputBinding<T> >>;
 	var pad(get,never) : hxd.Pad;
@@ -27,6 +30,10 @@ class ControllerAccess<T:Int> {
 	inline function get_destroyed() return input==null || input.destroyed;
 	inline function get_bindings() return destroyed ? null : input.bindings;
 	inline function get_pad() return destroyed ? null : input.pad;
+	inline function get_disableRumble() return destroyed ? false : input.disableRumble;
+	inline function set_disableRumble(v){ if(!destroyed)input.disableRumble = v; return disableRumble; }
+	inline function get_rumbleMultiplicator() return destroyed ? 0 : input.rumbleMultiplicator;
+	inline function set_rumbleMultiplicator(v){ if(!destroyed)input.rumbleMultiplicator = v; return rumbleMultiplicator; }
 
 	/** Current `ControllerDebug` instance, if it exists. This can be created using `createDebugger()` **/
 	public var debugger(default,null) : Null<ControllerDebug<T>>;
@@ -103,15 +110,18 @@ class ControllerAccess<T:Int> {
 	/**
 		Return analog float value (-1.0 to 1.0) associated with given action Enum.
 	**/
-	public function getAnalogValue(action:T) : Float {
-		var out = 0.;
-		if( isActive() && input.bindings.exists(action) )
+	public inline function getAnalogValue(action:T) : Float {
+		if( isActive() && input.bindings.exists(action) ) {
+			var out = 0.;
 			for(b in input.bindings.get(action) ) {
 				out = b.getValue(input.pad);
 				if( out!=0 )
-					return out;
+					break;
 			}
-		return 0;
+			return out;
+		}
+		else
+			return 0;
 	}
 
 
@@ -119,7 +129,7 @@ class ControllerAccess<T:Int> {
 	/**
 		Return analog float value (-1.0 to 1.0) associated with given the 2 action Enum (this implies that these 2 actions refer to the negative/positive directions of the analog).
 	**/
-	public function getAnalogValue2(negativeAction:T, positiveAction:T) : Float {
+	public inline function getAnalogValue2(negativeAction:T, positiveAction:T) : Float {
 		return -M.fabs(getAnalogValue(negativeAction)) + M.fabs(getAnalogValue(positiveAction));
 	}
 
@@ -430,9 +440,8 @@ class ControllerAccess<T:Int> {
 	}
 
 	/** Rumbles physical controller, if supported **/
-	public function rumble(strength:Float, seconds:Float) {
-		if( pad.index>=0 )
-			pad.rumble(strength, seconds);
+	public inline function rumble(strength:Float, seconds:Float) {
+		input.rumble(strength, seconds);
 	}
 
 	/**

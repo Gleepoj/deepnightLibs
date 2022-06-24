@@ -13,8 +13,12 @@ import hxd.impl.AllocPos;
 class ParticlePool {
 	var all : haxe.ds.Vector<HParticle>;
 	var nalloc : Int;
+
 	public var size(get,never) : Int;
 		inline function get_size() return all.length;
+
+	public var allocated(get,never) : Int;
+		inline function get_allocated() return nalloc;
 
 	public function new(tile:h2d.Tile, count:Int, fps:Int) {
 		all = new haxe.ds.Vector(count);
@@ -55,6 +59,9 @@ class ParticlePool {
 		}
 	}
 
+	/**
+		When a particle is killed, pick last allocated one and move it here. This prevents "gaps" in the pool.
+	**/
 	inline function free(kp:HParticle) {
 		if( all!=null ) {
 			if( nalloc>1 ) {
@@ -71,13 +78,14 @@ class ParticlePool {
 	}
 
 	/** Count active particles **/
+	@:noCompletion @:deprecated("Use `allocated` var")
 	public inline function count() return nalloc;
 
 
 	/** Destroy every active particles **/
 	public function clear() {
 		// Because new particles might be allocated during onKill() callbacks,
-		// it's sometimes necessary to repeat the clear() process multiple times.
+		// it's sometimes necessary to repeat the clearing loop multiple times.
 		var repeat = false;
 		var maxRepeats = 10;
 		var p : HParticle = null;
@@ -102,10 +110,8 @@ class ParticlePool {
 	public inline function killAll() clear();
 
 	public inline function killAllWithFade() {
-		for( i in 0...nalloc) {
-			var p = all[i];
-			p.lifeS = 0;
-		}
+		for( i in 0...nalloc)
+			all[i].lifeS = 0;
 	}
 
 	public function dispose() {
@@ -116,10 +122,11 @@ class ParticlePool {
 
 	public inline function update(tmod:Float, ?updateCb:HParticle->Void) {
 		var i = 0;
-		while( i < nalloc ){
-			var p = all[i];
+		var p : HParticle;
+		while( i < nalloc ) {
+			p = all[i];
 			@:privateAccess p.updatePart(tmod);
-			if( !p.killed ){
+			if( !p.killed ) {
 				if( updateCb!=null )
 					updateCb( p );
 				i++;
@@ -137,11 +144,18 @@ class Emitter {
 	public var hei : Float;
 	public var cd : dn.Cooldown;
 	public var delayer : dn.Delayer;
+
+	/** If this method is set, it should return TRUE to enable the emitter or FALSE to disable it. **/
 	public var activeCond : Null<Void->Bool>;
+
+	/** Active state of the emitter **/
 	public var active(default,set) : Bool;
 	public var tmod : Float;
 	public var destroyed(default,null) : Bool;
+
+	/** Frequency (in seconds) of the `onUpdate` calls **/
 	public var tickS : Float;
+
 	public var padding : Int;
 
 	public var top(get,never) : Float;  inline function get_top() return y;
@@ -203,7 +217,7 @@ class Emitter {
 			return;
 
 		destroyed = true;
-		cd.destroy();
+		cd.dispose();
 		delayer.destroy();
 		onDispose();
 		activeCond = null;
@@ -219,8 +233,10 @@ class Emitter {
 			cd.update(tmod);
 			delayer.update(tmod);
 
-			if( tickS<=0 || !cd.hasSetS("emitterTick", tickS) )
+			if( tickS<=0 || !cd.has("emitterTick") ) {
 				onUpdate();
+				cd.setS("emitterTick", tickS);
+			}
 
 			if( !permanent && !cd.has("emitterLife") )
 				dispose();
@@ -297,8 +313,8 @@ class HParticle extends BatchElement {
 
 	public var userData : Dynamic;
 
-	var fromColor : UInt;
-	var toColor : UInt;
+	var fromColor : Col;
+	var toColor : Col;
 	var dColor : Float;
 	var rColor : Float;
 
@@ -378,6 +394,15 @@ class HParticle extends BatchElement {
 		this.t.switchTexture(tile);
 	}
 
+	public inline function initIfNull0(v:Float) if( Math.isNaN(data0) ) data0 = v;
+	public inline function initIfNull1(v:Float) if( Math.isNaN(data1) ) data1 = v;
+	public inline function initIfNull2(v:Float) if( Math.isNaN(data2) ) data2 = v;
+	public inline function initIfNull3(v:Float) if( Math.isNaN(data3) ) data3 = v;
+	public inline function initIfNull4(v:Float) if( Math.isNaN(data4) ) data4 = v;
+	public inline function initIfNull5(v:Float) if( Math.isNaN(data5) ) data5 = v;
+	public inline function initIfNull6(v:Float) if( Math.isNaN(data6) ) data6 = v;
+	public inline function initIfNull7(v:Float) if( Math.isNaN(data7) ) data7 = v;
+
 	public inline function inc0() return Math.isNaN(data0) ? data0=1 : ++data0;
 	public inline function inc1() return Math.isNaN(data1) ? data1=1 : ++data1;
 	public inline function inc2() return Math.isNaN(data2) ? data2=1 : ++data2;
@@ -455,7 +480,7 @@ class HParticle extends BatchElement {
 
 
 
-	public inline function colorAnimS(from:UInt, to:UInt, t:Float) {
+	public inline function colorAnimS(from:Col, to:Col, t:Float) {
 		fromColor = from;
 		toColor = to;
 		dColor = 1/(t*fps);
@@ -491,24 +516,37 @@ class HParticle extends BatchElement {
 
 	public inline function uncolorize() r = g = b = 1;
 
-	public inline function colorize(c:UInt, ratio=1.0) {
-		dn.Color.colorizeBatchElement(this, c, ratio);
+	public inline function colorize(c:Col, ratio=1.0) {
+		c.colorizeH2dBatchElement(this, ratio);
 	}
 
-	public inline function colorizeRandomDarker(c:UInt, range:Float) {
-		colorize( Color.toBlack(c,rnd(0,range)) );
+	public inline function colorizeRandomDarker(c:Col, range:Float) {
+		colorize( c.toBlack( rnd(0,range) ) );
 	}
 
-	public inline function colorizeRandomLighter(c:UInt, range:Float) {
-		colorize( Color.toWhite(c,rnd(0,range)) );
+	public inline function colorizeRandomLighter(c:Col, range:Float) {
+		colorize( c.toWhite( rnd(0,range) ) );
 	}
 
 	public inline function randScale(min:Float, max:Float, sign=false) {
 		setScale( rnd(min, max, sign) );
 	}
 
-	public inline function colorizeRandom(min:UInt, max:UInt) {
-		dn.Color.colorizeBatchElement(this, dn.Color.interpolateInt(min,max,rnd(0,1)), 1);
+	public inline function colorizeRandom(min:Col, max:Col) {
+		min.interpolate( max, rnd(0,1) ).colorizeH2dBatchElement(this, 1);
+	}
+
+
+	public inline function randFlipXY() {
+		scaleX *= RandomTools.sign();
+		scaleY *= RandomTools.sign();
+	}
+	public inline function randFlipX() scaleX *= RandomTools.sign();
+	public inline function randFlipY() scaleY *= RandomTools.sign();
+	public inline function randRotation() rotation = RandomTools.fullCircle();
+	public inline function randRotationAndFlips() {
+		randFlipXY();
+		randRotation();
 	}
 
 	public inline function delayCallback(cb:HParticle->Void, sec:Float) {
@@ -545,6 +583,10 @@ class HParticle extends BatchElement {
 	public inline function autoRotate(spd=1.0) {
 		autoRotateSpeed = spd;
 		rotation = getMoveAng();
+	}
+
+	public inline function disableAutoRotate() {
+		autoRotateSpeed = 0;
 	}
 
 	@:keep
@@ -776,7 +818,7 @@ class HParticle extends BatchElement {
 					// Color animation
 					if( !Math.isNaN(rColor) ) {
 						rColor = M.fclamp(rColor+dColor*tmod, 0, 1);
-						colorize( dn.Color.interpolateInt(fromColor, toColor, rColor) );
+						colorize( fromColor.interpolate(toColor, rColor) );
 					}
 
 					// Fade in
