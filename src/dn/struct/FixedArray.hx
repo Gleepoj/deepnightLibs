@@ -24,6 +24,9 @@ class FixedArray<T> {
 		inline function get_maxSize() return values.length;
 
 
+	@:deprecated("Use 'allocated' here (to avoid allocated/maxSize ambiguity)") @:noCompletion
+	public var length(get,never) : Int; inline function get_length() return allocated;
+
 	public function new(?name:String, maxSize:Int) {
 		this.name = name;
 		values = new haxe.ds.Vector(maxSize);
@@ -48,7 +51,7 @@ class FixedArray<T> {
 		return '[ ${sub.join(", ")} ]';
 	}
 
-	/** Get value at given index **/
+	/** Get value at given index, or null if out of bounds **/
 	public inline function get(idx:Int) : Null<T> {
 		return idx<0 || idx>=nalloc ? null : values[idx];
 	}
@@ -63,6 +66,11 @@ class FixedArray<T> {
 	/** Get first value (without modifying the array) **/
 	public inline function first() : Null<T> {
 		return values[0];
+	}
+
+	/** Get first value (without modifying the array) **/
+	public inline function oneRandomly() : Null<T> {
+		return allocated==0 ? null : values[ Std.random(allocated) ];
 	}
 
 	/** Get last value (without modifying the array) **/

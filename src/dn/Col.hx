@@ -31,6 +31,52 @@ abstract Col(Int) from Int to Int {
 		this = rgb;
 	}
 
+
+	public static inline function white(withAlpha=false) return _colorEnumWithAlpha(White, withAlpha);
+	public static inline function black(withAlpha=false) return _colorEnumWithAlpha(Black, withAlpha);
+
+	public static inline function midGray(withAlpha=false) return _colorEnumWithAlpha(MidGray, withAlpha);
+	public static inline function coldLightGray(withAlpha=false) return _colorEnumWithAlpha(ColdLightGray, withAlpha);
+	public static inline function coldMidGray(withAlpha=false) return _colorEnumWithAlpha(ColdMidGray, withAlpha);
+	public static inline function warmLightGray(withAlpha=false) return _colorEnumWithAlpha(WarmLightGray, withAlpha);
+	public static inline function warmMidGray(withAlpha=false) return _colorEnumWithAlpha(WarmMidGray, withAlpha);
+
+	public static inline function red(withAlpha=false) return _colorEnumWithAlpha(Red, withAlpha);
+	public static inline function green(withAlpha=false) return _colorEnumWithAlpha(Green, withAlpha);
+	public static inline function blue(withAlpha=false) return _colorEnumWithAlpha(Blue, withAlpha);
+
+	public static inline function pink(withAlpha=false) return _colorEnumWithAlpha(Pink, withAlpha);
+	public static inline function yellow(withAlpha=false) return _colorEnumWithAlpha(Yellow, withAlpha);
+	public static inline function lime(withAlpha=false) return _colorEnumWithAlpha(Lime, withAlpha);
+
+	static inline function _colorEnumWithAlpha(c:ColorEnum, withAlpha:Bool) : Col {
+		return withAlpha ? cast(c, Col).withAlpha(1) : c;
+	}
+
+
+	/** Create a gray Col from a single float value (0.0 = black  =>  0.5 = mid gray =>  1.0 = white)  **/
+	@:from public static inline function gray(v:Float) : Col {
+		return fromRGBf(v,v,v);
+	}
+
+	/** Create a "warm" gray Col from a single float value (0.0 = black  =>  0.5 = mid warm gray =>  1.0 = white)  **/
+	public static inline function warmGray(lightness:Float) {
+		return lightness>=0.5
+			? warmMidGray(false).toWhite( (lightness-0.5)/0.5 )
+			: warmMidGray(false).toBlack( 1-lightness/0.5 );
+	}
+
+	/** Create a "cold" gray Col from a single float value (0.0 = black  =>  0.5 = mid cold gray =>  1.0 = white)  **/
+	public static inline function coldGray(lightness:Float) {
+		return lightness>=0.5
+			? coldMidGray(false).toWhite( (lightness-0.5)/0.5 )
+			: coldMidGray(false).toBlack( 1-lightness/0.5 );
+	}
+
+
+	/** Return a new instance of the same color **/
+	public inline function clone() return new Col(this);
+
 	/** Create a random color using HSL **/
 	public static inline function randomHSL(?hue:Float, ?sat:Float, ?lum:Float) : Col {
 		return fromHsl(
@@ -167,7 +213,7 @@ abstract Col(Int) from Int to Int {
 	**/
 	@:from public static macro function inlineHex(e:haxe.macro.Expr.ExprOf<String>) : ExprOf<Col> {
 		_inlineBlockExpr(e);
-		return e;
+		return macro cast($e, Col);
 	}
 
 
@@ -179,6 +225,24 @@ abstract Col(Int) from Int to Int {
 		return c.toHex(true);
 	}
 
+
+	/** Explicit Int cast **/
+	public inline function toInt() : Int {
+		return this;
+	}
+
+	/** HXSL Vec4 **/
+	#if heaps
+	public inline function toShaderVec4() : hxsl.Types.Vec {
+		return hxsl.Types.Vec.fromColor(this);
+	}
+	#end
+	/** HXSL Vec4 **/
+	#if heaps
+	public inline function toShaderVec3() : hxsl.Types.Vec {
+		return hxsl.Types.Vec.fromColor( withoutAlpha() );
+	}
+	#end
 
 
 	// Hex parser cache
@@ -252,12 +316,6 @@ abstract Col(Int) from Int to Int {
 	}
 
 
-	/** Create a gray Col from a single float value (0.0 = black  =>  0.5 = mid gray =>  1.0 = white)  **/
-	@:from public static inline function gray(v:Float) : Col {
-		return fromRGBf(v,v,v);
-	}
-
-
 
 
 	/** Red channel as Int (0-255) **/
@@ -304,12 +362,17 @@ abstract Col(Int) from Int to Int {
 
 
 	/** Return color with given alpha (0-1) **/
-	public inline function withAlpha(a=1.0) {
+	public inline function withAlpha(a:Float) : Col {
 		return M.round(a*255) << 24 | withoutAlpha();
 	}
 
+	/** Return color with either the given alpha value (0-1), or the current color alpha, if it is not zero. **/
+	public inline function withAlphaIfMissing(a=1.0) : Col {
+		return af!=0 ? clone() : withAlpha(a);
+	}
+
 	/** Return color without alpha **/
-	public inline function withoutAlpha() {
+	public inline function withoutAlpha() : Col {
 		return this & 0xffffff;
 	}
 
@@ -322,6 +385,68 @@ abstract Col(Int) from Int to Int {
 	public static inline function getAlphaf(c:Col) : Float {
 		return c.af;
 	}
+
+
+	public inline function multiplyRGB(f:Float) {
+		var c = clone();
+		c.rf*=f;
+		c.gf*=f;
+		c.bf*=f;
+		return c;
+	}
+
+	public inline function incRGB(v:Float) {
+		var c = clone();
+		c.rf = M.fclamp( c.rf + v, 0, 1 );
+		c.gf = M.fclamp( c.gf + v, 0, 1 );
+		c.bf = M.fclamp( c.bf + v, 0, 1 );
+		return c;
+	}
+
+
+	/** Return a variation of this color using HSL **/
+	public inline function adjustHsl(deltaH:Float, deltaS:Float, deltaL:Float) : Col {
+		var c = clone();
+		var a = c.af; // preserve alpha
+
+		c.hue += deltaH;
+		c.saturation += deltaS;
+		c.lightness += deltaL;
+
+		c.af = a;
+		return c;
+	}
+
+
+	public inline function adjustBrightness(delta:Float) : Col {
+		var c = clone();
+		var a = c.af; // preserve alpha
+
+		if( delta<0 ) {
+			// Darken
+			var l = c.lightness;
+			l = M.fmax(l+delta, 0);
+			c.lightness = l;
+		}
+		else {
+			// Brighten
+			var l = c.lightness;
+			var maxDist = 1-l;
+			if( maxDist>delta )
+				l += delta;
+			else {
+				l = 1;
+				var s = c.saturation;
+				s -= delta-maxDist;
+				if( s<0 ) s = 0;
+				c.saturation = s;
+			}
+			c.lightness = l;
+		}
+		c.af = a;
+		return c;
+	}
+
 
 
 
@@ -427,6 +552,12 @@ abstract Col(Int) from Int to Int {
 	}
 
 
+	/** Return an inverted version of current color **/
+	public inline function invert() : Col {
+		return fromRGBf(1-rf, 1-gf, 1-bf, af);
+	}
+
+
 	/** Return an interpolation to Black, at % ratio **/
 	public inline function toBlack(ratio:Float) : Col {
 		return
@@ -448,6 +579,9 @@ abstract Col(Int) from Int to Int {
 			( M.round(b + (255-b)*ratio) );
 	}
 
+	/** Interpolate to given color, at % ratio (this method is an alias of `Col.interpolate()`) **/
+	public inline function to(to:Col, ratio:Float) return interpolate(to,ratio);
+
 	/** Interpolate to given color, at % ratio **/
 	public inline function interpolate(to:Col, ratio:Float) : Col {
 		return
@@ -467,8 +601,8 @@ abstract Col(Int) from Int to Int {
 	/**
 		Return current color teinted to `target`, approximately preserving luminance of original color.
 	**/
-	public inline function teint(target:Col, ratio:Float) : Col {
-		var l = fastLuminance;
+	public inline function teint(target:Col, ratio:Float, customLum=-1.) : Col {
+		var l = customLum<0 ? fastLuminance : customLum;
 		if( l<0.65 )
 			return interpolate( target.toBlack(1-l/0.65), ratio );
 		else
@@ -521,6 +655,7 @@ abstract Col(Int) from Int to Int {
 		return b;
 	}
 	#end
+
 }
 
 
@@ -655,8 +790,12 @@ class UnitTest {
 		CiAssert.equals( M.pretty( Col.fromInt(0x00ff00).fastLuminance, 2 ), 0.59 );
 		CiAssert.equals( M.pretty( Col.fromInt(0x0000ff).fastLuminance, 2 ), 0.11 );
 
+		CiAssert.equals( Col.fromInt(0x0).invert(), 0xffffff );
+		CiAssert.equals( Col.fromInt(0xffffff).invert(), 0x0 );
+		CiAssert.equals( Col.fromInt(0x00ff00).invert(), 0xff00ff );
+
 		// Alpha
-		CiAssert.equals( Col.fromInt(0x112233).withAlpha(), 0xff112233);
+		CiAssert.equals( Col.fromInt(0x112233).withAlpha(1), 0xff112233);
 		CiAssert.equals( Col.fromInt(0x112233).withAlpha(0.5), 0x80112233);
 		CiAssert.equals( Col.fromInt(0xff112233).withoutAlpha(), 0x112233);
 		CiAssert.equals( Col.fromInt(0x112233).withoutAlpha(), 0x112233);

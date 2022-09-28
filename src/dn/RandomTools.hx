@@ -36,6 +36,11 @@ class RandomTools {
 		return v * ( 1 + rnd(0,pct/100,true) ) * ( sign ? RandomTools.sign() : 1 );
 	}
 
+	/** Randomly variate given value `v` in +/- `pct`%. If `sign` is true, the value will some times be multiplied by -1. **/
+	public static inline function iaround(v:Int, pct=10, sign=false) : Int {
+		return M.round( v * ( 1 + rnd(0,pct/100,true) ) * ( sign ? RandomTools.sign() : 1 ) );
+	}
+
 	/** Returns -1 or 1 randomly **/
 	public static inline function sign() {
 		return Std.random(2)*2-1;
@@ -92,8 +97,12 @@ class RandomTools {
 
 
 	/** Pick a value randomly in an array **/
-	public static inline function pick<T>(a:Array<T>) : Null<T> {
-		return a.length==0 ? null : a[Std.random(a.length)];
+	public static inline function pick<T>(a:Array<T>, removeAfterPick=false) : Null<T> {
+		return a.length==0
+			? null
+			: removeAfterPick
+				? a.splice( Std.random(a.length), 1 )[0]
+				: a[Std.random(a.length)];
 	}
 
 

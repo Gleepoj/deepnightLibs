@@ -131,20 +131,26 @@ class M {
 	 */
 	inline public static var LN2 = 0.6931471805599453;
 
-	/**
-	 * Math.PI / 2.
-	 */
+	/* Math.PI/2 */
 	inline public static var PIHALF = 1.5707963267948966;
 
-	/**
-	 * Math.PI.
-	 */
-	inline public static var PI = 3.141592653589793;
+	/* Math.PI */
+	inline public static var PI   = 3.141592653589793;
 
-	/**
-	 * 2 * Math.PI.
-	 */
-	inline public static var PI2 = 6.283185307179586;
+	/* Math.PI*2 */
+	inline public static var PI2  = 6.283185307179586;
+
+	/* Math.PI*2 */
+	inline public static var A360 = PI2;
+
+	/* Math.PI */
+	inline public static var A180 = PI;
+
+	/* Math.PI/2 */
+	inline public static var A90  = PIHALF;
+
+	/* Math.PI/4 */
+	inline public static var A45  = 0.785398163397448;
 
 	/**
 	 * Default system epsilon.
@@ -205,6 +211,13 @@ class M {
 	}
 	inline public static function signEq(x:Float,y:Float):Bool {
 		return M.sign(x)==M.sign(y);
+	}
+
+	/**
+		Always return a non-zero value
+	**/
+	public static inline function notZero(v:Float, ifZero=0.000001) {
+		return v==0 ? ifZero : v;
 	}
 
 	/**
@@ -1006,6 +1019,16 @@ class M {
 	}
 
 
+	/**
+		Return a 0-1 ratio by "clamping" `r` to [min,max].
+		 - If r<=min, this returns 0,
+		 - If r>=min and r<=max, this returns 0 to 1,
+		 - If r>=max, this returns 1,
+	**/
+	public static inline function subRatio(r:Float, min:Float, max:Float) : Float {
+		return M.fclamp( (r-min) / (max-min), 0, 1 );
+	}
+
 	@:noCompletion
 	public static function __test() {
 		// TODO more tests
@@ -1094,5 +1117,11 @@ class M {
 		CiAssert.equals( M.unitMega(1234567), "1.2M" );
 		CiAssert.equals( M.unitMega(1234567,2), "1.23M" );
 		CiAssert.equals( M.unitMega(1500000), "1.5M" );
+
+		CiAssert.equals( M.subRatio(0.1,  0.5, 0.7), 0 );
+		CiAssert.equals( M.subRatio(0.5,  0.5, 0.7), 0 );
+		CiAssert.equals( M.subRatio(0.6,  0.5, 0.7), 0.5 );
+		CiAssert.equals( M.subRatio(0.7,  0.5, 0.7), 1 );
+		CiAssert.equals( M.subRatio(0.9,  0.5, 0.7), 1 );
 	}
 }

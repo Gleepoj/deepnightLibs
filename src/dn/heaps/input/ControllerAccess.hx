@@ -211,14 +211,12 @@ class ControllerAccess<T:Int> {
 		Return TRUE if given action Enum is "down". For a digital binding, this means the button/key is pushed. For an analog binding, this means it is pushed beyond a specific threshold.
 	**/
 	public function isDown(v:T) : Bool {
-		if( isActive() && bindings.exists(v) )
+		if( isActive() && bindings.exists(v) ) {
 			for(b in bindings.get(v))
-				if( b.isDown(pad) ) {
-					updateHoldStatus(v,true);
+				if( b.isDown(pad) )
 					return true;
-				}
+		}
 
-		updateHoldStatus(v,false);
 		return false;
 	}
 
@@ -227,43 +225,52 @@ class ControllerAccess<T:Int> {
 		Return TRUE if given action Enum is "pressed" (ie. pushed while it was previously released). By definition, this only happens during 1 frame, when control is pushed.
 	**/
 	public function isPressed(v:T) : Bool {
-		if( isActive() && bindings.exists(v) )
+		if( isActive() && bindings.exists(v) ) {
 			for(b in bindings.get(v))
-				if( b.isPressed(pad) ) {
-					updateHoldStatus(v,true);
+				if( b.isPressed(pad) )
 					return true;
-				}
+		}
 
-		updateHoldStatus(v,false);
 		return false;
 	}
 
 
-	public inline function initHeldStatus(action:T) {
-		updateHoldStatus(action, false);
+	public inline function initHeldState(action:T) {
+		if( holdTimeS.exists(action) )
+			holdTimeS.remove( action );
+	}
+
+	/**
+		Update the "held" state of an action.
+
+		NOTE: most of the time, this method shouldn't be required, as the "held" state is automatically updated through calls to `isHeld` and `getHoldRatio`. But in some situations, you might need to manually call this update at the *beginning* of your frames, to ensure the held state is properly updated.
+
+		If in doubt, just call it. You will not break anything doing so.
+	**/
+	public inline function updateHeldState(action:T) {
+		if( !isDown(action) && holdTimeS.exists(action) )
+			holdTimeS.remove( action );
+		else if( isDown(action) && !holdTimeS.exists(action) )
+			holdTimeS.set( action, haxe.Timer.stamp() );
 	}
 
 	/**
 		Return TRUE if given action Enum is "held down" for more than `seconds` seconds.
-		Note: "down" for a digital binding means the button/key is pushed. For an analog binding, this means it is pushed *beyond* a specific threshold.
+
+		WARNING: the method will actually start its internal "held timer" when it will see the action as being down. This means the method should be called continuously for this to happen correctly.
 	**/
 	public inline function isHeld(action:T, seconds:Float) : Bool {
+		updateHeldState(action);
 		if( !isDown(action) )
 			return false;
-
-		if( holdTimeS.get(action)>0 && getHoldTimeS(action) >= seconds ) {
-			holdTimeS.set(action, -1);
-			return true;
+		else {
+			if( holdTimeS.get(action)>0 && getHoldTimeS(action) >= seconds ) {
+				holdTimeS.set(action, -1);
+				return true;
+			}
+			else
+				return false;
 		}
-		else
-			return false;
-	}
-
-	inline function updateHoldStatus(action:T, held:Bool) {
-		if( !held && holdTimeS.exists(action) )
-			holdTimeS.remove( action );
-		else if( held && !holdTimeS.exists(action) )
-			holdTimeS.set( action, haxe.Timer.stamp() );
 	}
 
 	inline function getHoldTimeS(action:T) : Float {
@@ -274,7 +281,7 @@ class ControllerAccess<T:Int> {
 		Return a ratio (float between 0 and 1) representing how long given `action` was held down.
 	**/
 	public inline function getHoldRatio(action:T, seconds:Float) : Float {
-		isDown(action); // will update the held status
+		updateHeldState(action);
 		return !holdTimeS.exists(action)
 			? 0
 			: holdTimeS.get(action)<0
